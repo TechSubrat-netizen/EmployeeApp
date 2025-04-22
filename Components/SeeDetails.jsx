@@ -1,4 +1,5 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
 import {
   View,
   Text,
@@ -12,13 +13,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNHTMLtoPDF from 'react-native-html-to-pdf';
 import RNPrint from 'react-native-print';
 import QRCode from 'react-native-qrcode-svg';
-
+import RNFS from 'react-native-fs';
+import ViewShot from 'react-native-view-shot';
+import { useNavigation } from '@react-navigation/native';
 
 function SeeDetails() {
   const [city, setCity] = useState('');
   const [name, setName] = useState('');
   const [qrValue, setQRvalue] = useState('');
-
+  const qrRef = useRef();
+  const navigation=useNavigation()
   const fetchAllDetails = async () => {
     const storedCity = await AsyncStorage.getItem('city');
     const storedName = await AsyncStorage.getItem('name');
@@ -36,27 +40,40 @@ function SeeDetails() {
     return qrValue !== '' || city !== '' || name !== '';
   };
 
+  const captureQR = async () => {
+    if (qrRef.current) {
+      const uri = await qrRef.current.capture();
+      const base64 = await RNFS.readFile(uri, 'base64');
+      return base64;
+    }
+    return '';
+  };  
+
   const printPDF = async () => {
     if (!isDataAvailable()) {
       Alert.alert('No Data', 'No data available to generate PDF.');
       return;
     }
-
+  
+    const qrBase64 = await captureQR();
+  
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; padding: 20px;">
-        <h2 style="text-align: center;">User Details</h2>
-
-        <p><strong>QR Code Value:</strong> ${qrValue}</p>
-        <p><strong>City:</strong> ${city}</p>
-        <p><strong>Name:</strong> ${name}</p>
-
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <img src="https://i.ibb.co/TqpMh2DM/ciya.jpg" alt="ciya" style="height: 100px; width: 100px;" />
+          <img src="data:image/png;base64,${qrBase64}" style="height: 100px; width: 100px;" />
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; margin-top: 20px;">
+          <p><strong>City:</strong> ${city}</p>
+          <p><strong>Name:</strong> ${name}</p>
+        </div>
         <div style="margin-top: 80px; text-align: right;">
           <p><strong>Signature</strong></p>
-          <p> not required</p>
+          <p>not required</p>
         </div>
       </div>
     `;
-
+  
     try {
       const results = await RNHTMLtoPDF.convert({
         html: htmlContent,
@@ -64,9 +81,10 @@ function SeeDetails() {
         directory: 'Documents',
         base64: true,
       });
-
+  
       if (results.filePath) {
-        await RNPrint.print({filePath: results.filePath});
+        await RNPrint.print({ filePath: results.filePath });
+       
       } else {
         Alert.alert('Error', 'Failed to generate PDF.');
       }
@@ -75,9 +93,8 @@ function SeeDetails() {
       Alert.alert('Error', 'An error occurred while generating PDF.');
     }
   };
-
   return (
-    <SafeAreaView style={{flex: 1}}>
+    <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.scrollView}>
         <View style={styles.textView}>
           {isDataAvailable() ? (
@@ -96,26 +113,26 @@ function SeeDetails() {
             <Text style={styles.noDataText}>No data available</Text>
           )}
         </View>
-        <View>
-        <QRCode
-      value="Just some string value"
-      logo={{uri: qrValue}}
-      logoSize={3}
-     
-    />
+
+    
+        <View style={{ position: 'absolute', left: -9999 }}>
+          <ViewShot ref={qrRef} options={{ format: 'png', result: 'tmpfile' }}>
+            <QRCode value={qrValue || 'default'} size={100} />
+          </ViewShot>
         </View>
 
         <TouchableOpacity
           style={[
             styles.buttonStyle,
-            !isDataAvailable() && {backgroundColor: '#aaa'},
+            !isDataAvailable() && { backgroundColor: '#aaa' },
           ]}
           onPress={printPDF}
-          disabled={!isDataAvailable()}>
-          <Text style={styles.buttonText}>Download PDF</Text>
+          disabled={!isDataAvailable()}
+        >
+          <Text style={styles.buttonText}>Print PDF</Text>
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
